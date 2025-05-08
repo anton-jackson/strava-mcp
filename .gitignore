@@ -1,0 +1,22 @@
+# Node.js
+node_modules/
+dist/
+
+# Environment variables
+.env
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
