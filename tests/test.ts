@@ -13,23 +13,18 @@ export class StravaClient {
   private client: any;
   
   constructor(accessToken?: string) {
-    // Initialize with the provided token or from env
-    this.client = accessToken ? strava.client(accessToken) : strava;
-  }
-
-  /**
-   * Initialize the client with a fresh token
-   */
-  async initialize() {
-    try {
-      console.error('Initializing Strava client with fresh token...');
-      const newToken = await this.refreshAccessToken();
-      this.client = strava.client(newToken);
-      console.error('✅ Strava client initialized successfully');
-    } catch (error) {
-      console.error('❌ Failed to initialize Strava client:', error);
-      throw error;
+    // Configure strava with environment variables if no token provided
+    if (!accessToken) {
+      strava.config({
+        access_token: process.env.STRAVA_ACCESS_TOKEN,
+        client_id: process.env.STRAVA_CLIENT_ID,
+        client_secret: process.env.STRAVA_CLIENT_SECRET,
+        redirect_uri: process.env.STRAVA_REDIRECT_URI
+      });
     }
+    
+    // Create the client instance
+    this.client = accessToken ? strava.client(accessToken) : strava;
   }
   
   /**
@@ -47,7 +42,7 @@ export class StravaClient {
     }
     
     try {
-      console.error('🔄 Refreshing Strava access token...');
+      console.log('🔄 Refreshing Strava access token...');
       const response = await axios.post('https://www.strava.com/oauth/token', {
         client_id: clientId,
         client_secret: clientSecret,
@@ -63,27 +58,19 @@ export class StravaClient {
         throw new Error('Refresh response missing required tokens');
       }
       
-      // Store tokens as plain strings
-      process.env.STRAVA_ACCESS_TOKEN = String(newAccessToken);
-      process.env.STRAVA_REFRESH_TOKEN = String(newRefreshToken);
+      process.env.STRAVA_ACCESS_TOKEN = newAccessToken;
+      process.env.STRAVA_REFRESH_TOKEN = newRefreshToken;
       
       // Also update .env file for persistence
-      await this.updateTokensInEnvFile(String(newAccessToken), String(newRefreshToken));
+      await this.updateTokensInEnvFile(newAccessToken, newRefreshToken);
       
-      console.error(`✅ Token refreshed. New token expires: ${new Date(response.data.expires_at * 1000).toLocaleString()}`);
+      console.log(`✅ Token refreshed. New token expires: ${new Date(response.data.expires_at * 1000).toLocaleString()}`);
       
       // Update the client with the new token
-      this.client = strava.client(String(newAccessToken));
+      this.client = strava.client(newAccessToken);
       
-      return String(newAccessToken);
+      return newAccessToken;
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        console.error('Strava API Error:', {
-          status: error.response.status,
-          data: error.response.data
-        });
-        throw new Error(`Strava API Error: ${error.response.data.message || 'Unknown error'}`);
-      }
       console.error('Failed to refresh access token:', error);
       throw new Error(`Failed to refresh Strava access token: ${error instanceof Error ? error.message : String(error)}`);
     }
