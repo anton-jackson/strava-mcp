@@ -35,6 +35,7 @@ npm install
 ```
 STRAVA_CLIENT_ID=your_client_id
 STRAVA_CLIENT_SECRET=your_client_secret
+STRAVA_ACCESS_TOKEN=your_access_token
 STRAVA_REFRESH_TOKEN=your_refresh_token
 ```
 
@@ -59,10 +60,10 @@ Add the following to your Claude Desktop configuration file:
 
 ```json
 "mcpServers": {
-  "strava-mcp": {
+  "strava-mcp": {ca
     "command": "node",
     "args": [
-      "/absolute/path/to/strava-mcp/dist/index.js"
+      "/absolute/path/to/strava-mcp/dist/mcp-server.js"
     ]
   }
 }
