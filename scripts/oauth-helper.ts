@@ -3,6 +3,7 @@ import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
 import readline from 'readline';
+import { fileURLToPath } from 'url';
 
 // Load environment variables
 dotenv.config();
@@ -82,8 +83,9 @@ async function oauthHelper() {
     console.log(`Authenticated as: ${athlete.firstname} ${athlete.lastname}`);
     
     // Step 4: Update .env file
-    console.log('Step 3: Updating .env file...');
-    const envPath = path.resolve(process.cwd(), '.env');
+  console.log('Step 3: Updating .env file...');
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const envPath = path.resolve(__dirname, '..', '.env');
     let envContent = await fs.readFile(envPath, 'utf-8');
     const lines = envContent.split('\n');
     const newLines: string[] = [];

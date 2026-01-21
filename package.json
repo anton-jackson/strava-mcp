@@ -11,7 +11,11 @@
     "test:watch": "jest --watch",
     "test:mcp": "ts-node src/test-server.ts",
     "dev:mcp": "ts-node --esm src/mcp-server.ts",
-    "build:start": "npm run build && npm start"
+    "build:start": "npm run build && npm start",
+    "auth-tester": "ts-node --esm scripts/auth-tester.ts",
+    "refresh-token": "ts-node --esm scripts/refresh-token.ts",
+    "fix-permissions": "ts-node --esm scripts/fix-permissions.ts",
+    "oauth-helper": "ts-node --esm scripts/oauth-helper.ts"
   },
   "keywords": [],
   "author": "Your Name <your.email@example.com>",

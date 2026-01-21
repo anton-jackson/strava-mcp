@@ -31,15 +31,20 @@ cd strava-mcp
 npm install
 ```
 
-3. Create a `.env` file with your Strava API credentials:
+3. Run the credential helper to create/update `.env` in the repo root:
+```bash
+# Recommended: full setup with all scopes and verification
+npm run fix-permissions
 ```
-STRAVA_CLIENT_ID=your_client_id
-STRAVA_CLIENT_SECRET=your_client_secret
-STRAVA_ACCESS_TOKEN=your_access_token
-STRAVA_REFRESH_TOKEN=your_refresh_token
-```
+This will guide you through the Strava OAuth flow, write `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_ACCESS_TOKEN`, and `STRAVA_REFRESH_TOKEN` to `.env`, and verify activity access.
 
-4. Build the MCP server:
+4. (Optional) If you already have correct scopes but need a simpler flow:
+```bash
+npm run oauth-helper
+```
+This performs the OAuth exchange for `read,activity:read_all` and writes the tokens to `.env`.
+
+5. Build the MCP server:
 ```bash
 npm run build
 ```
@@ -60,7 +65,7 @@ Add the following to your Claude Desktop configuration file:
 
 ```json
 "mcpServers": {
-  "strava-mcp": {ca
+  "strava-mcp": {
     "command": "node",
     "args": [
       "/absolute/path/to/strava-mcp/dist/mcp-server.js"
@@ -91,6 +96,13 @@ Once your MCP server is connected to Claude, you can ask questions like:
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Helper Scripts
+
+- `npm run fix-permissions`: Full guided OAuth with all scopes; updates `.env`; verifies Strava access. Run this first for a clean setup or when scopes are broken.
+- `npm run oauth-helper`: Simpler OAuth flow for `read,activity:read_all`; updates `.env`.
+- `npm run auth-tester`: Checks env vars, attempts token refresh, writes updated tokens, and verifies API access.
+- `npm run refresh-token`: Minimal token refresh via `StravaClient`; assumes `.env` is already correct.
 
 ## License
 

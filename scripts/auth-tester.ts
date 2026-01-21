@@ -2,6 +2,11 @@ import axios from 'axios';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Resolve repository root (one level above /scripts)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const envPath = path.resolve(__dirname, '..', '.env');
 
 // Load current environment variables
 dotenv.config();
@@ -25,7 +30,6 @@ async function testAndFixStravaAuth() {
   }
   
   // Step 2: Print the .env file path we're working with
-  const envPath = path.resolve(process.cwd(), '.env');
   console.log(`\nUsing .env file at: ${envPath}`);
   
   try {

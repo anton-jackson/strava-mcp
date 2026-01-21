@@ -3,6 +3,7 @@ import readline from 'readline';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Load environment variables
 dotenv.config();
@@ -12,8 +13,11 @@ const rl = readline.createInterface({
   output: process.stdout
 });
 
+// Resolve repository root (one level above /scripts)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 // Path to .env file
-const envPath = path.resolve(process.cwd(), '.env');
+const envPath = path.resolve(__dirname, '..', '.env');
 
 // Function to get input from user
 function askQuestion(query: string): Promise<string> {
