@@ -1,6 +1,15 @@
 import StravaClient from '../strava-client.js';
 import { z } from 'zod';
 
+// Helper functions to convert metric to imperial
+function metersToMiles(meters: number): number {
+  return meters * 0.000621371;
+}
+
+function metersToFeet(meters: number): number {
+  return meters * 3.28084;
+}
+
 interface Activity {
   id: number;
   name: string;
@@ -48,13 +57,52 @@ export const getRecentActivitiesToolDefinition = {
             type: activity.type,
             start_date: activity.start_date,
             start_date_local: activity.start_date_local,
-            distance: activity.distance,
+            distance_miles: metersToMiles(activity.distance),
+            distance_meters: activity.distance,
             moving_time: activity.moving_time,
-            total_elevation_gain: activity.total_elevation_gain,
+            elevation_gain_feet: activity.total_elevation_gain ? metersToFeet(activity.total_elevation_gain) : undefined,
+            elevation_gain_meters: activity.total_elevation_gain,
             has_heartrate: activity.has_heartrate,
             average_heartrate: activity.average_heartrate,
             max_heartrate: activity.max_heartrate
           }))
+        }
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+};
+
+export const getActivityByIdToolDefinition = {
+  name: 'getActivityById',
+  description: 'Get detailed information about a specific activity by its ID',
+  parameters: {
+    activityId: {
+      type: 'number',
+      description: 'ID of the activity to retrieve'
+    }
+  },
+  handler: async ({ activityId }: { activityId: number }) => {
+    try {
+      const stravaClient = new StravaClient();
+      const activity = await stravaClient.getActivity(activityId);
+      
+      return {
+        structuredContent: {
+          id: activity.id,
+          name: activity.name,
+          type: activity.type,
+          start_date: activity.start_date,
+          start_date_local: activity.start_date_local,
+          distance_miles: metersToMiles(activity.distance),
+          distance_meters: activity.distance,
+          moving_time: activity.moving_time,
+          elevation_gain_feet: activity.total_elevation_gain ? metersToFeet(activity.total_elevation_gain) : undefined,
+          elevation_gain_meters: activity.total_elevation_gain,
+          has_heartrate: activity.has_heartrate,
+          average_heartrate: activity.average_heartrate,
+          max_heartrate: activity.max_heartrate
         }
       };
     } catch (error) {
@@ -152,8 +200,11 @@ export const getActivitiesByDateToolDefinition = {
             name: activity.name,
             type: activity.type,
             start_date: activity.start_date,
-            distance: activity.distance,
+            distance_miles: metersToMiles(activity.distance),
+            distance_meters: activity.distance,
             moving_time: activity.moving_time,
+            elevation_gain_feet: activity.total_elevation_gain ? metersToFeet(activity.total_elevation_gain) : undefined,
+            elevation_gain_meters: activity.total_elevation_gain,
             has_heartrate: activity.has_heartrate,
             average_heartrate: activity.average_heartrate,
             max_heartrate: activity.max_heartrate

@@ -5,6 +5,9 @@ dist/
 # Environment variables
 .env
 
+# User-specific zones configuration
+zones.config.json
+
 # IDE files
 .vscode/
 .idea/

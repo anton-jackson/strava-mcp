@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import fs from 'fs/promises';
 import path from 'path';
 import axios from 'axios';
+import { loadZonesConfig, getHeartRateZone, getPowerZone } from './zones-config.js';
 
 dotenv.config();
 
@@ -254,6 +255,9 @@ export class StravaClient {
       const timeStream = streams.find((s: any) => s.type === 'time');
       const distanceStream = streams.find((s: any) => s.type === 'distance');
       
+      // Helper function to convert meters to miles
+      const metersToMiles = (meters: number) => meters * 0.000621371;
+      
       // Create a combined dataset if all streams exist
       let combinedData = [];
       if (heartRateStream && timeStream) {
@@ -263,9 +267,10 @@ export class StravaClient {
             time_elapsed: timeStream.data[index] // in seconds
           };
           
-          // Add distance if available
+          // Add distance if available (convert to miles)
           if (distanceStream && index < distanceStream.data.length) {
-            dataPoint.distance = distanceStream.data[index]; // in meters
+            dataPoint.distance_miles = metersToMiles(distanceStream.data[index]);
+            dataPoint.distance_meters = distanceStream.data[index]; // keep original for reference
           }
           
           return dataPoint;
@@ -280,15 +285,24 @@ export class StravaClient {
         avg: activity.average_heartrate,
       } : {};
       
+      // Analyze heart rate zones
+      const zonesConfig = loadZonesConfig();
+      const sport = activity.type?.toLowerCase().includes('ride') || activity.type?.toLowerCase().includes('bike') ? 'cycling' : 'running';
+      
+      // Group heart rate data by zones
+      const zoneAnalysis = this.analyzeHeartRateZones(heartRateData, sport, zonesConfig, timeStream?.data || []);
+      
       // Return comprehensive heart rate information
       return {
         activity_id: activityId,
         activity_name: activity.name,
+        activity_type: activity.type,
         has_heartrate: true,
         athlete_id: activity.athlete.id,
         start_date: activity.start_date,
         heart_rate_stats: heartRateStats,
         heart_rate_time_series: combinedData,
+        zone_analysis: zoneAnalysis,
         // Include the raw time-series data for custom analysis
         raw_data: {
           heart_rate: heartRateStream ? heartRateStream.data : [],
@@ -297,6 +311,100 @@ export class StravaClient {
         }
       };
     });
+  }
+  
+  /**
+   * Analyze heart rate data and group it into zones
+   * @param heartRateData Array of heart rate values
+   * @param sport Sport type ('running' or 'cycling')
+   * @param zonesConfig Zones configuration
+   * @param timeData Array of time values in seconds
+   * @returns Zone analysis with time spent in each zone
+   */
+  private analyzeHeartRateZones(
+    heartRateData: number[],
+    sport: 'running' | 'cycling',
+    zonesConfig: any,
+    timeData: number[]
+  ): any {
+    if (heartRateData.length === 0) {
+      return null;
+    }
+    
+    // Load zones config if not provided
+    const config = zonesConfig || loadZonesConfig();
+    const zones = config.sports[sport];
+    
+    if (!zones || Object.keys(zones).length === 0) {
+      return { error: 'Zones not configured for this sport' };
+    }
+    
+    // Initialize zone counters
+    const zoneTime: { [zoneName: string]: number } = {};
+    const zoneDataPoints: { [zoneName: string]: number } = {};
+    const zoneHeartRates: { [zoneName: string]: number[] } = {};
+    
+    // Initialize all zones
+    for (const zoneName of Object.keys(zones)) {
+      zoneTime[zoneName] = 0;
+      zoneDataPoints[zoneName] = 0;
+      zoneHeartRates[zoneName] = [];
+    }
+    
+    // Calculate time intervals (assume uniform sampling if time data not available)
+    let timeInterval = 1; // default 1 second
+    if (timeData.length === heartRateData.length && timeData.length > 1) {
+      // Calculate average interval
+      const intervals = [];
+      for (let i = 1; i < timeData.length; i++) {
+        intervals.push(timeData[i] - timeData[i - 1]);
+      }
+      timeInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    }
+    
+    // Group each heart rate reading into zones
+    for (let i = 0; i < heartRateData.length; i++) {
+      const hr = heartRateData[i];
+      const zoneResult = getHeartRateZone(hr, sport, config);
+      
+      if (zoneResult) {
+        const { zoneName } = zoneResult;
+        zoneTime[zoneName] += timeInterval;
+        zoneDataPoints[zoneName]++;
+        zoneHeartRates[zoneName].push(hr);
+      }
+    }
+    
+    // Calculate statistics for each zone
+    const totalTime = heartRateData.length * timeInterval;
+    const zoneBreakdown: any[] = [];
+    
+    for (const [zoneName, zone] of Object.entries(zones)) {
+      const timeInZone = zoneTime[zoneName] || 0;
+      const percentage = totalTime > 0 ? (timeInZone / totalTime) * 100 : 0;
+      const avgHR = zoneHeartRates[zoneName]?.length > 0
+        ? zoneHeartRates[zoneName].reduce((a, b) => a + b, 0) / zoneHeartRates[zoneName].length
+        : null;
+      
+      zoneBreakdown.push({
+        zone_name: zoneName,
+        zone_info: zone,
+        time_seconds: Math.round(timeInZone),
+        time_minutes: Math.round(timeInZone / 60 * 10) / 10,
+        percentage: Math.round(percentage * 10) / 10,
+        data_points: zoneDataPoints[zoneName] || 0,
+        average_heart_rate: avgHR ? Math.round(avgHR) : null,
+        min_heart_rate: zoneHeartRates[zoneName]?.length > 0 ? Math.min(...zoneHeartRates[zoneName]) : null,
+        max_heart_rate: zoneHeartRates[zoneName]?.length > 0 ? Math.max(...zoneHeartRates[zoneName]) : null
+      });
+    }
+    
+    return {
+      sport,
+      total_time_seconds: Math.round(totalTime),
+      total_time_minutes: Math.round(totalTime / 60 * 10) / 10,
+      zones: zoneBreakdown.sort((a, b) => b.percentage - a.percentage) // Sort by percentage descending
+    };
   }
   
   /**
@@ -330,6 +438,7 @@ export class StravaClient {
           start_date: activity.start_date,
           distance: activity.distance,
           moving_time: activity.moving_time,
+          total_elevation_gain: activity.total_elevation_gain,
           average_heartrate: activity.average_heartrate,
           max_heartrate: activity.max_heartrate
         }))

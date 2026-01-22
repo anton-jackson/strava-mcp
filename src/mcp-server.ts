@@ -15,6 +15,28 @@ dotenv.config({ path: envPath });
 // Import your Strava client
 import StravaClient from './strava-client.js';
 
+// Helper functions to convert metric to imperial
+function metersToMiles(meters: number): number {
+  return meters * 0.000621371;
+}
+
+function metersToFeet(meters: number): number {
+  return meters * 3.28084;
+}
+
+function formatDistance(meters: number): string {
+  const miles = metersToMiles(meters);
+  if (miles < 0.1) {
+    return `${Math.round(miles * 5280)} ft`;
+  }
+  return `${miles.toFixed(2)} mi`;
+}
+
+function formatElevation(meters: number): string {
+  const feet = metersToFeet(meters);
+  return `${Math.round(feet)} ft`;
+}
+
 interface Activity {
   id: number;
   name: string;
@@ -69,8 +91,39 @@ const getRecentActivities = {
     return {
       content: activities.map((activity: Activity) => ({
         type: "text" as const,
-        text: `🏃 ${activity.name} (ID: ${activity.id}) — ${activity.distance}m on ${new Date(activity.start_date).toLocaleDateString()}`
+        text: `🏃 ${activity.name} (ID: ${activity.id}) — ${formatDistance(activity.distance)}${activity.total_elevation_gain ? `, ${formatElevation(activity.total_elevation_gain)} elevation gain` : ''} on ${new Date(activity.start_date).toLocaleDateString()}`
       }))
+    };
+  }
+};
+
+// Get Activity by ID Tool
+const getActivityById = {
+  name: 'getActivityById',
+  description: 'Get detailed information about a specific activity by its ID',
+  inputSchema: z.object({
+    activityId: z.number().describe('The ID of the activity to retrieve')
+  }),
+  execute: async ({ activityId }: { activityId: number }) => {
+    const stravaClient = new StravaClient();
+    const activity = await stravaClient.getActivity(activityId);
+    
+    const details = [
+      `🏃 ${activity.name}`,
+      `Type: ${activity.type}`,
+      `Date: ${new Date(activity.start_date).toLocaleDateString()}`,
+      `Distance: ${formatDistance(activity.distance)}`,
+      `Moving Time: ${Math.floor(activity.moving_time / 60)} minutes`,
+      activity.total_elevation_gain ? `Elevation Gain: ${formatElevation(activity.total_elevation_gain)}` : null,
+      activity.has_heartrate ? `Average HR: ${activity.average_heartrate} bpm` : null,
+      activity.has_heartrate ? `Max HR: ${activity.max_heartrate} bpm` : null
+    ].filter(Boolean).join('\n');
+
+    return {
+      content: [{
+        type: "text" as const,
+        text: details
+      }]
     };
   }
 };
@@ -96,7 +149,7 @@ const getActivityHeartRate = {
     return {
       content: [{
         type: "text" as const,
-        text: `❤️ ${activity.name}\nAverage HR: ${activity.average_heartrate} bpm\nMax HR: ${activity.max_heartrate} bpm`
+        text: `❤️ ${activity.name}\nAverage HR: ${activity.average_heartrate} bpm\nMax HR: ${activity.max_heartrate} bpm${activity.total_elevation_gain ? `\nElevation Gain: ${formatElevation(activity.total_elevation_gain)}` : ''}`
       }]
     };
   }
@@ -123,7 +176,7 @@ const getRecentActivitiesWithHeartRate = {
     return {
       content: activitiesWithHeartRate.map((activity: Activity) => ({
         type: "text" as const,
-        text: `🏃 ${activity.name} (ID: ${activity.id}) — Avg HR: ${activity.average_heartrate} bpm, Max HR: ${activity.max_heartrate} bpm`
+        text: `🏃 ${activity.name} (ID: ${activity.id}) — Avg HR: ${activity.average_heartrate} bpm, Max HR: ${activity.max_heartrate} bpm${activity.total_elevation_gain ? `, ${formatElevation(activity.total_elevation_gain)} elevation gain` : ''}`
       }))
     };
   }
@@ -150,7 +203,7 @@ const getActivitiesByDate = {
     return {
       content: activities.map((activity: Activity) => ({
         type: "text" as const,
-        text: `🏃 ${activity.name} (ID: ${activity.id}) — ${activity.distance}m on ${new Date(activity.start_date).toLocaleDateString()}`
+        text: `🏃 ${activity.name} (ID: ${activity.id}) — ${formatDistance(activity.distance)}${activity.total_elevation_gain ? `, ${formatElevation(activity.total_elevation_gain)} elevation gain` : ''} on ${new Date(activity.start_date).toLocaleDateString()}`
       }))
     };
   }
@@ -162,6 +215,13 @@ server.tool(
   getRecentActivities.description,
   getRecentActivities.inputSchema?.shape ?? {},
   getRecentActivities.execute
+);
+
+server.tool(
+  getActivityById.name,
+  getActivityById.description,
+  getActivityById.inputSchema?.shape ?? {},
+  getActivityById.execute
 );
 
 server.tool(

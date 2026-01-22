@@ -1,0 +1,130 @@
+{
+  "sports": {
+    "running": {
+      "Zone 1": {
+        "min": 0,
+        "max": 0,
+        "description": "Active Recovery - Easy conversational pace"
+      },
+      "Low Zone 2": {
+        "min": 0,
+        "max": 0,
+        "description": "Aerobic Base - Comfortable endurance pace"
+      },
+      "High Zone 2": {
+        "min": 0,
+        "max": 0,
+        "description": "Aerobic Base - Moderate endurance pace"
+      },
+      "Zone 3": {
+        "min": 0,
+        "max": 0,
+        "description": "Aerobic Threshold - Comfortably hard pace"
+      },
+      "Zone 4": {
+        "min": 0,
+        "max": 0,
+        "description": "Lactate Threshold - Hard sustainable pace"
+      },
+      "Zone 5": {
+        "min": 0,
+        "max": 999,
+        "description": "VO2 Max - Very hard to maximal effort"
+      }
+    },
+    "cycling": {
+      "Zone 1": {
+        "min": 0,
+        "max": 0,
+        "description": "Active Recovery - Easy spinning, minimal effort"
+      },
+      "Low Zone 2": {
+        "min": 0,
+        "max": 0,
+        "description": "Aerobic Base - Comfortable endurance riding"
+      },
+      "High Zone 2": {
+        "min": 0,
+        "max": 0,
+        "description": "Aerobic Base - Moderate endurance riding"
+      },
+      "Zone 3": {
+        "min": 0,
+        "max": 0,
+        "description": "Aerobic Threshold - Tempo riding pace"
+      },
+      "Zone 4": {
+        "min": 0,
+        "max": 0,
+        "description": "Lactate Threshold - Hard sustainable cycling effort"
+      },
+      "Zone 5": {
+        "min": 0,
+        "max": 999,
+        "description": "VO2 Max - Very hard to maximal cycling effort"
+      }
+    }
+  },
+  "metadata": {
+    "version": "2.0",
+    "description": "Multi-sport HR zones configuration with cycling-specific zones",
+    "defaultSport": "running",
+    "autoCalculate": false,
+    "userSettings": {
+      "running": {
+        "maxHeartRate": 0,
+        "restingHeartRate": 0
+      },
+      "cycling": {
+        "maxHeartRate": 0,
+        "restingHeartRate": 0
+      }
+    }
+  },
+  "powerZones": {
+    "cycling": {
+      "Zone 1": {
+        "min": 0,
+        "max": 0,
+        "description": "Active Recovery - Easy spinning, minimal power output",
+        "unit": "watts"
+      },
+      "Zone 2": {
+        "min": 0,
+        "max": 0,
+        "description": "Aerobic Base - Comfortable endurance power",
+        "unit": "watts"
+      },
+      "Zone 3": {
+        "min": 0,
+        "max": 0,
+        "description": "Aerobic Threshold - Tempo power output",
+        "unit": "watts"
+      },
+      "Zone 4": {
+        "min": 0,
+        "max": 0,
+        "description": "Lactate Threshold - Functional Threshold Power (FTP)",
+        "unit": "watts"
+      },
+      "Zone 5": {
+        "min": 0,
+        "max": 0,
+        "description": "VO2 Max - Hard anaerobic power",
+        "unit": "watts"
+      },
+      "Zone 6": {
+        "min": 0,
+        "max": 9999,
+        "description": "Anaerobic Capacity - Maximal power output",
+        "unit": "watts"
+      }
+    }
+  },
+  "powerSettings": {
+    "cycling": {
+      "ftp": 0,
+      "autoCalculate": false
+    }
+  }
+}

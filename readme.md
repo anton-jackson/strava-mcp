@@ -44,7 +44,26 @@ npm run oauth-helper
 ```
 This performs the OAuth exchange for `read,activity:read_all` and writes the tokens to `.env`.
 
-5. Build the MCP server:
+5. Configure your heart rate and power zones (optional but recommended for zone analysis):
+```bash
+# Copy the example zones configuration file
+cp zones.config.json.example zones.config.json
+
+# Edit zones.config.json with your personal zones
+# You can either:
+# - Manually enter your zone min/max values for running and cycling
+# - Set autoCalculate: true and enter your maxHeartRate and FTP values
+```
+
+The zones configuration file allows you to:
+- Define sport-specific heart rate zones (running and cycling)
+- Configure power zones for cycling (requires FTP)
+- Choose between manual zone entry or auto-calculation from max heart rate/FTP
+- Enable zone analysis in activity heart rate data
+
+**Note:** `zones.config.json` is in `.gitignore` and won't be committed to the repository. Your personal zones remain private.
+
+6. Build the MCP server:
 ```bash
 npm run build
 ```
@@ -78,11 +97,21 @@ Add the following to your Claude Desktop configuration file:
 
 This MCP server provides the following tools to AI assistants:
 
-- `getRecentActivities`: Fetches your most recent Strava activities
-- `getActivityById`: Retrieves detailed information about a specific activity
-- `getAthleteStats`: Gets summary statistics about your performance
-- `getActivitiesByDateRange`: Filters activities within a specific timeframe
-- `getActivitiesByType`: Retrieves activities of a specific type (run, ride, swim, etc.)
+- `getRecentActivities`: Fetches your most recent Strava activities with distance and elevation gain
+- `getActivityById`: Retrieves detailed information about a specific activity including distance, elevation, and heart rate data
+- `getActivityHeartRate`: Gets detailed heart rate data for a specific activity, including zone analysis if zones are configured
+- `getRecentActivitiesWithHeartRate`: Retrieves recent activities that include heart rate data
+- `getActivitiesByDate`: Filters activities within a specific date range
+
+### Zone Analysis
+
+When heart rate zones are configured in `zones.config.json`, the `getActivityHeartRate` tool automatically analyzes your heart rate data and provides:
+- Time spent in each zone (seconds and minutes)
+- Percentage of activity in each zone
+- Average, min, and max heart rate for each zone
+- Zone breakdown sorted by time spent
+
+The analysis automatically detects the sport type (running vs cycling) and uses the appropriate zones from your configuration.
 
 ## Example Interactions
 
@@ -90,6 +119,8 @@ Once your MCP server is connected to Claude, you can ask questions like:
 
 - "How many miles did I run last week?"
 - "What was my average heart rate during my last cycling activity?"
+- "Show me the heart rate zone breakdown for my last run"
+- "How much time did I spend in Zone 4 during my recent activities?"
 - "Show me all my swim workouts from the past month"
 - "What's my current fitness trend based on my recent activities?"
 
