@@ -8,6 +8,10 @@ dist/
 # User-specific zones configuration
 zones.config.json
 
+# Development test scripts
+scripts/test-streams.ts
+scripts/test-streams-format.ts
+
 # IDE files
 .vscode/
 .idea/
