@@ -207,6 +207,142 @@ export class StravaClient {
   }
   
   /**
+   * Get activity laps
+   * @param id Activity ID
+   * @returns Array of lap objects
+   */
+  async getActivityLaps(id: number) {
+    return this.handleApiCall(`getActivityLaps(${id})`, async () => {
+      const accessToken = process.env.STRAVA_ACCESS_TOKEN;
+      if (!accessToken) {
+        throw new Error('STRAVA_ACCESS_TOKEN not found in environment');
+      }
+      
+      const response = await axios.get(`https://www.strava.com/api/v3/activities/${id}/laps`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+      
+      return response.data;
+    });
+  }
+  
+  /**
+   * Get activity laps with heart rate and elevation data
+   * @param activityId ID of the activity
+   * @returns Array of laps with heart rate and elevation analysis
+   */
+  async getActivityLapsWithData(activityId: number) {
+    return this.handleApiCall(`getActivityLapsWithData(${activityId})`, async () => {
+      // Get activity details
+      const activity = await this.getActivity(activityId);
+      
+      // Get laps
+      const laps = await this.getActivityLaps(activityId);
+      
+      if (laps.length === 0) {
+        return {
+          activity_id: activityId,
+          activity_name: activity.name,
+          laps: [],
+          message: "This activity has no lap data"
+        };
+      }
+      
+      // Get streams for heart rate and elevation
+      const streams = await this.getActivityStreams(activityId, ['heartrate', 'altitude', 'time', 'distance']);
+      const heartRateStream = streams.find((s: any) => s.type === 'heartrate');
+      const altitudeStream = streams.find((s: any) => s.type === 'altitude');
+      const timeStream = streams.find((s: any) => s.type === 'time');
+      
+      // Helper functions
+      const metersToFeet = (meters: number) => meters * 3.28084;
+      
+      // Load zones config for heart rate zone analysis
+      const zonesConfig = loadZonesConfig();
+      const sport = activity.type?.toLowerCase().includes('ride') || activity.type?.toLowerCase().includes('bike') 
+        ? 'cycling' 
+        : (zonesConfig.metadata?.defaultSport || 'running') as 'running' | 'cycling';
+      
+      // Process each lap
+      const lapsWithData = laps.map((lap: any) => {
+        const lapData: any = {
+          lap_id: lap.id,
+          lap_name: lap.name,
+          lap_index: lap.lap_index,
+          distance_miles: lap.distance * 0.000621371,
+          distance_meters: lap.distance,
+          elapsed_time: lap.elapsed_time,
+          moving_time: lap.moving_time,
+          elevation_gain_feet: lap.total_elevation_gain ? metersToFeet(lap.total_elevation_gain) : null,
+          elevation_gain_meters: lap.total_elevation_gain,
+          average_speed: lap.average_speed,
+          max_speed: lap.max_speed
+        };
+        
+        // Extract heart rate data for this lap using start_index and end_index
+        if (heartRateStream && lap.start_index !== undefined && lap.end_index !== undefined) {
+          const lapHeartRateData = heartRateStream.data.slice(lap.start_index, lap.end_index + 1);
+          
+          if (lapHeartRateData.length > 0) {
+            lapData.heart_rate = {
+              average: lap.average_heartrate || (lapHeartRateData.reduce((a: number, b: number) => a + b, 0) / lapHeartRateData.length),
+              max: lap.max_heartrate || Math.max(...lapHeartRateData),
+              min: Math.min(...lapHeartRateData),
+              data_points: lapHeartRateData.length
+            };
+            
+            // Zone analysis for this lap
+            if (zonesConfig && zonesConfig.sports[sport]) {
+              const lapZoneAnalysis = this.analyzeHeartRateZones(
+                lapHeartRateData,
+                sport,
+                zonesConfig,
+                timeStream ? timeStream.data.slice(lap.start_index, lap.end_index + 1) : []
+              );
+              lapData.heart_rate.zone_analysis = lapZoneAnalysis;
+            }
+          }
+        } else if (lap.average_heartrate) {
+          // Fallback to lap-level heart rate if available
+          lapData.heart_rate = {
+            average: lap.average_heartrate,
+            max: lap.max_heartrate || null,
+            min: null,
+            data_points: 0
+          };
+        }
+        
+        // Extract elevation data for this lap
+        if (altitudeStream && lap.start_index !== undefined && lap.end_index !== undefined) {
+          const lapAltitudeData = altitudeStream.data.slice(lap.start_index, lap.end_index + 1);
+          
+          if (lapAltitudeData.length > 0) {
+            lapData.elevation = {
+              min_feet: metersToFeet(Math.min(...lapAltitudeData)),
+              max_feet: metersToFeet(Math.max(...lapAltitudeData)),
+              min_meters: Math.min(...lapAltitudeData),
+              max_meters: Math.max(...lapAltitudeData),
+              data_points: lapAltitudeData.length
+            };
+          }
+        }
+        
+        return lapData;
+      });
+      
+      return {
+        activity_id: activityId,
+        activity_name: activity.name,
+        activity_type: activity.type,
+        total_laps: laps.length,
+        laps: lapsWithData
+      };
+    });
+  }
+  
+  /**
    * Get activities within a specific date range
    * @param after Start date
    * @param before End date
@@ -287,7 +423,11 @@ export class StravaClient {
       
       // Analyze heart rate zones
       const zonesConfig = loadZonesConfig();
-      const sport = activity.type?.toLowerCase().includes('ride') || activity.type?.toLowerCase().includes('bike') ? 'cycling' : 'running';
+      // Determine sport: cycling if ride/bike, otherwise use defaultSport from config (defaults to 'running')
+      const activityTypeLower = activity.type?.toLowerCase() || '';
+      const sport = activityTypeLower.includes('ride') || activityTypeLower.includes('bike') 
+        ? 'cycling' 
+        : (zonesConfig.metadata?.defaultSport || 'running') as 'running' | 'cycling';
       
       // Group heart rate data by zones
       const zoneAnalysis = this.analyzeHeartRateZones(heartRateData, sport, zonesConfig, timeStream?.data || []);

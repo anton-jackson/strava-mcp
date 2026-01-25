@@ -131,27 +131,70 @@ const getActivityById = {
 // Get Activity Heart Rate Tool
 const getActivityHeartRate = {
   name: 'getActivityHeartRate',
-  description: 'Get heart rate data for a specific activity',
+  description: 'Get detailed heart rate data for a specific activity, including zone analysis if zones are configured',
   inputSchema: z.object({
     activityId: z.number().describe('The ID of the activity to get heart rate data for')
   }),
   execute: async ({ activityId }: { activityId: number }) => {
     const stravaClient = new StravaClient();
-    const activity = await stravaClient.getActivity(activityId);
     
-    if (!activity.has_heartrate) {
+    try {
+      const heartRateData = await stravaClient.getHeartRateData(activityId);
+      
+      if (!heartRateData.has_heartrate) {
+        return {
+          content: [{ type: "text" as const, text: "❌ This activity does not have heart rate data" }],
+          isError: true
+        };
+      }
+
+      // Build response text
+      let responseText = `❤️ ${heartRateData.activity_name}\n`;
+      responseText += `Activity Type: ${heartRateData.activity_type}\n`;
+      responseText += `Date: ${new Date(heartRateData.start_date).toLocaleDateString()}\n\n`;
+      
+      // Heart rate stats
+      if (heartRateData.heart_rate_stats) {
+        responseText += `Heart Rate Statistics:\n`;
+        responseText += `- Average: ${heartRateData.heart_rate_stats.avg} bpm\n`;
+        responseText += `- Min: ${heartRateData.heart_rate_stats.min} bpm\n`;
+        responseText += `- Max: ${heartRateData.heart_rate_stats.max} bpm\n\n`;
+      }
+      
+      // Zone analysis
+      if (heartRateData.zone_analysis && !heartRateData.zone_analysis.error) {
+        const zoneAnalysis = heartRateData.zone_analysis;
+        responseText += `Zone Analysis (${zoneAnalysis.sport}):\n`;
+        responseText += `Total Time: ${zoneAnalysis.total_time_minutes} minutes\n\n`;
+        responseText += `Time in Zones:\n`;
+        
+        for (const zone of zoneAnalysis.zones) {
+          responseText += `- ${zone.zone_name}: ${zone.time_minutes} min (${zone.percentage}%)`;
+          if (zone.average_heart_rate) {
+            responseText += ` - Avg HR: ${zone.average_heart_rate} bpm`;
+          }
+          responseText += `\n`;
+        }
+      } else if (heartRateData.zone_analysis?.error) {
+        responseText += `\n⚠️ Zone analysis unavailable: ${heartRateData.zone_analysis.error}\n`;
+        responseText += `Configure zones in zones.config.json to enable zone analysis.\n`;
+      }
+
       return {
-        content: [{ type: "text" as const, text: "❌ This activity does not have heart rate data" }],
+        content: [{
+          type: "text" as const,
+          text: responseText
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{ 
+          type: "text" as const, 
+          text: `❌ Error retrieving heart rate data: ${error instanceof Error ? error.message : String(error)}` 
+        }],
         isError: true
       };
     }
-
-    return {
-      content: [{
-        type: "text" as const,
-        text: `❤️ ${activity.name}\nAverage HR: ${activity.average_heartrate} bpm\nMax HR: ${activity.max_heartrate} bpm${activity.total_elevation_gain ? `\nElevation Gain: ${formatElevation(activity.total_elevation_gain)}` : ''}`
-      }]
-    };
   }
 };
 
@@ -209,6 +252,82 @@ const getActivitiesByDate = {
   }
 };
 
+// Get Activity Laps Tool
+const getActivityLaps = {
+  name: 'getActivityLaps',
+  description: 'Get lap-by-lap data for an activity including heart rate and elevation per lap',
+  inputSchema: z.object({
+    activityId: z.number().describe('The ID of the activity to get lap data for')
+  }),
+  execute: async ({ activityId }: { activityId: number }) => {
+    const stravaClient = new StravaClient();
+    
+    try {
+      const lapData = await stravaClient.getActivityLapsWithData(activityId);
+      
+      if (lapData.laps.length === 0) {
+        return {
+          content: [{ type: "text" as const, text: `❌ ${lapData.message || 'This activity has no lap data'}` }],
+          isError: true
+        };
+      }
+
+      let responseText = `🏃 ${lapData.activity_name}\n`;
+      responseText += `Activity Type: ${lapData.activity_type}\n`;
+      responseText += `Total Laps: ${lapData.total_laps}\n\n`;
+      
+      lapData.laps.forEach((lap: any, index: number) => {
+        responseText += `Lap ${lap.lap_index || index + 1}: ${lap.lap_name}\n`;
+        responseText += `  Distance: ${lap.distance_miles.toFixed(2)} mi\n`;
+        responseText += `  Time: ${Math.floor(lap.elapsed_time / 60)}:${String(lap.elapsed_time % 60).padStart(2, '0')}\n`;
+        
+        if (lap.elevation_gain_feet) {
+          responseText += `  Elevation Gain: ${formatElevation(lap.elevation_gain_meters)}\n`;
+        }
+        
+        if (lap.elevation) {
+          responseText += `  Elevation Range: ${Math.round(lap.elevation.min_feet)} - ${Math.round(lap.elevation.max_feet)} ft\n`;
+        }
+        
+        if (lap.heart_rate) {
+          responseText += `  Heart Rate: Avg ${Math.round(lap.heart_rate.average)} bpm`;
+          if (lap.heart_rate.max) {
+            responseText += `, Max ${Math.round(lap.heart_rate.max)} bpm`;
+          }
+          responseText += `\n`;
+          
+          // Zone analysis for lap
+          if (lap.heart_rate.zone_analysis && !lap.heart_rate.zone_analysis.error) {
+            const topZones = lap.heart_rate.zone_analysis.zones
+              .filter((z: any) => z.percentage > 0)
+              .slice(0, 3);
+            if (topZones.length > 0) {
+              responseText += `  Top Zones: ${topZones.map((z: any) => `${z.zone_name} (${z.percentage}%)`).join(', ')}\n`;
+            }
+          }
+        }
+        
+        responseText += `\n`;
+      });
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: responseText
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{ 
+          type: "text" as const, 
+          text: `❌ Error retrieving lap data: ${error instanceof Error ? error.message : String(error)}` 
+        }],
+        isError: true
+      };
+    }
+  }
+};
+
 // Register tools with the server
 server.tool(
   getRecentActivities.name,
@@ -243,6 +362,13 @@ server.tool(
   getActivitiesByDate.description,
   getActivitiesByDate.inputSchema?.shape ?? {},
   getActivitiesByDate.execute
+);
+
+server.tool(
+  getActivityLaps.name,
+  getActivityLaps.description,
+  getActivityLaps.inputSchema?.shape ?? {},
+  getActivityLaps.execute
 );
 
 // Start the server
