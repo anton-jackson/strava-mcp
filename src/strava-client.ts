@@ -193,16 +193,40 @@ export class StravaClient {
   /**
    * Get activity streams (time-series data) for a specific activity
    * @param id Activity ID
-   * @param types Array of stream types to fetch (e.g., heartrate, time, distance)
-   * @returns Array of stream objects
+   * @param types Array of stream types to fetch (e.g., heartrate, time, distance, altitude)
+   * @returns Array of stream objects with type and data properties
    */
   async getActivityStreams(id: number, types = ['heartrate', 'time', 'distance']) {
     return this.handleApiCall(`getActivityStreams(${id})`, async () => {
-      return await this.client.activities.getStreams({
-        id,
-        types: types.join(','),
-        resolution: 'high'
+      const accessToken = process.env.STRAVA_ACCESS_TOKEN;
+      if (!accessToken) {
+        throw new Error('STRAVA_ACCESS_TOKEN not found in environment');
+      }
+      
+      // Strava API v3 uses 'keys' parameter and 'key_by_type=true'
+      const keysParam = types.join(',');
+      const response = await axios.get(`https://www.strava.com/api/v3/activities/${id}/streams`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        },
+        params: {
+          keys: keysParam,
+          key_by_type: true
+        }
       });
+      
+      // When key_by_type=true, API returns an object like { heartrate: {...}, time: {...} }
+      // We need to convert it to an array format: [{ type: 'heartrate', data: [...], ... }, ...]
+      if (response.data && typeof response.data === 'object' && !Array.isArray(response.data)) {
+        // Convert object format to array format
+        return Object.entries(response.data).map(([type, stream]: [string, any]) => ({
+          type,
+          ...stream
+        }));
+      }
+      
+      // If it's already an array, return as-is
+      return response.data;
     });
   }
   
