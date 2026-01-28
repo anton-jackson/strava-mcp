@@ -72,31 +72,6 @@ const activitySchema = z.object({
   max_heartrate: z.number().optional()
 });
 
-// Get Recent Activities Tool
-const getRecentActivities = {
-  name: 'getRecentActivities',
-  description: 'Get the most recent activities from Strava',
-  inputSchema: z.object({
-    count: z.number().min(1).max(100).default(10).describe('Number of activities to retrieve (max 100)')
-  }),
-  execute: async ({ count }: { count: number }) => {
-    const stravaClient = new StravaClient();
-    const activities = await stravaClient.getActivitiesByDate(
-      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      new Date(),
-      1,
-      Math.min(count || 10, 100)
-    );
-
-    return {
-      content: activities.map((activity: Activity) => ({
-        type: "text" as const,
-        text: `🏃 ${activity.name} (ID: ${activity.id}) — ${formatDistance(activity.distance)}${activity.total_elevation_gain ? `, ${formatElevation(activity.total_elevation_gain)} elevation gain` : ''} on ${new Date(activity.start_date).toLocaleDateString()}`
-      }))
-    };
-  }
-};
-
 // Get Activity by ID Tool
 const getActivityById = {
   name: 'getActivityById',
@@ -198,57 +173,219 @@ const getActivityHeartRate = {
   }
 };
 
-// Get Recent Activities with Heart Rate Tool
-const getRecentActivitiesWithHeartRate = {
-  name: 'getRecentActivitiesWithHeartRate',
-  description: 'Get recent activities that have heart rate data',
+// Get Activities by Date Tool
+const getActivitiesByDate = {
+  name: 'getActivitiesByDate',
+  description: 'Get activities within a specific date range. Supports filtering by activity type and aggregation for stats queries.',
   inputSchema: z.object({
-    count: z.number().min(1).max(100).default(10).describe('Number of activities to retrieve (max 100)')
+    startDate: z.string().describe('Start date in ISO format (YYYY-MM-DD)'),
+    endDate: z.string().optional().describe('End date in ISO format (YYYY-MM-DD). Defaults to today if not provided.'),
+    activityTypes: z.array(z.string()).optional().describe('Filter by activity types (e.g., ["Run", "Ride", "BackcountrySki"]). If not provided, returns all activity types.'),
+    hasHeartRate: z.boolean().optional().describe('Filter to only activities with heart rate data'),
+    aggregate: z.boolean().optional().describe('If true, returns aggregated statistics (total distance, elevation, etc.) instead of individual activities'),
+    count: z.number().min(1).max(100).optional().describe('Number of activities to retrieve (max 100). Only used when aggregate is false.')
   }),
-  execute: async ({ count }: { count: number }) => {
+  execute: async ({ startDate, endDate, activityTypes, hasHeartRate, aggregate, count }: { 
+    startDate: string; 
+    endDate?: string; 
+    activityTypes?: string[];
+    hasHeartRate?: boolean;
+    aggregate?: boolean;
+    count?: number;
+  }) => {
     const stravaClient = new StravaClient();
-    const activities = await stravaClient.getActivitiesByDate(
-      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      new Date(),
-      1,
-      Math.min(count || 10, 100)
-    );
+    const end = endDate ? new Date(endDate) : new Date();
+    const start = new Date(startDate);
+    
+    // When aggregating, fetch ALL activities by paginating through all pages
+    // Otherwise, just fetch the requested count
+    let activities;
+    if (aggregate) {
+      activities = await stravaClient.getAllActivitiesByDate(start, end, 200);
+    } else {
+      activities = await stravaClient.getActivitiesByDate(
+        start,
+        end,
+        1,
+        Math.min(count || 10, 100)
+      );
+    }
 
-    const activitiesWithHeartRate = activities.filter((activity: Activity) => activity.has_heartrate);
+    // Apply filters
+    let filteredActivities = activities;
+    
+    if (activityTypes && activityTypes.length > 0) {
+      const typeLower = activityTypes.map(t => t.toLowerCase());
+      filteredActivities = filteredActivities.filter((activity: Activity) => 
+        typeLower.includes(activity.type.toLowerCase())
+      );
+    }
+    
+    if (hasHeartRate) {
+      filteredActivities = filteredActivities.filter((activity: Activity) => activity.has_heartrate);
+    }
 
+    // If aggregating, return totals
+    if (aggregate) {
+      const totalDistance = filteredActivities.reduce((sum: number, a: Activity) => sum + a.distance, 0);
+      const totalElevation = filteredActivities.reduce((sum: number, a: Activity) => sum + (a.total_elevation_gain || 0), 0);
+      const totalMovingTime = filteredActivities.reduce((sum: number, a: Activity) => sum + a.moving_time, 0);
+      const activityCount = filteredActivities.length;
+      
+      // Group by type for breakdown
+      const byType: { [key: string]: { count: number; distance: number; elevation: number } } = {};
+      filteredActivities.forEach((activity: Activity) => {
+        const type = activity.type;
+        if (!byType[type]) {
+          byType[type] = { count: 0, distance: 0, elevation: 0 };
+        }
+        byType[type].count++;
+        byType[type].distance += activity.distance;
+        byType[type].elevation += (activity.total_elevation_gain || 0);
+      });
+
+      let responseText = `📊 Activity Summary (${start.toLocaleDateString()} - ${end.toLocaleDateString()})\n\n`;
+      responseText += `Total Activities: ${activityCount}\n`;
+      responseText += `Total Distance: ${formatDistance(totalDistance)}\n`;
+      responseText += `Total Elevation Gain: ${formatElevation(totalElevation)}\n`;
+      responseText += `Total Moving Time: ${Math.floor(totalMovingTime / 3600)}h ${Math.floor((totalMovingTime % 3600) / 60)}m\n\n`;
+      
+      if (Object.keys(byType).length > 1) {
+        responseText += `Breakdown by Type:\n`;
+        Object.entries(byType).forEach(([type, stats]) => {
+          responseText += `- ${type}: ${stats.count} activities, ${formatDistance(stats.distance)}, ${formatElevation(stats.elevation)} elevation\n`;
+        });
+      }
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: responseText
+        }]
+      };
+    }
+
+    // Return individual activities
+    const limitedActivities = filteredActivities.slice(0, Math.min(count || 10, 100));
     return {
-      content: activitiesWithHeartRate.map((activity: Activity) => ({
+      content: limitedActivities.map((activity: Activity) => ({
         type: "text" as const,
-        text: `🏃 ${activity.name} (ID: ${activity.id}) — Avg HR: ${activity.average_heartrate} bpm, Max HR: ${activity.max_heartrate} bpm${activity.total_elevation_gain ? `, ${formatElevation(activity.total_elevation_gain)} elevation gain` : ''}`
+        text: `🏃 ${activity.name} (ID: ${activity.id}) — ${formatDistance(activity.distance)}${activity.total_elevation_gain ? `, ${formatElevation(activity.total_elevation_gain)} elevation gain` : ''} on ${new Date(activity.start_date).toLocaleDateString()}`
       }))
     };
   }
 };
 
-// Get Activities by Date Tool
-const getActivitiesByDate = {
-  name: 'getActivitiesByDate',
-  description: 'Get activities within a specific date range',
+// Get Last Activity Tool
+const getLastActivity = {
+  name: 'getLastActivity',
+  description: 'Get the most recent activity with automatic heart rate analysis. Optionally filter by activity type (e.g., "Run", "Ride"). For runs, includes pace analysis.',
   inputSchema: z.object({
-    startDate: z.string().describe('Start date in ISO format (YYYY-MM-DD)'),
-    endDate: z.string().describe('End date in ISO format (YYYY-MM-DD)'),
-    count: z.number().min(1).max(100).default(10).describe('Number of activities to retrieve (max 100)')
+    activityType: z.string().optional().describe('Filter by activity type (e.g., "Run", "Ride", "BackcountrySki"). If not provided, returns the most recent activity of any type.')
   }),
-  execute: async ({ startDate, endDate, count }: { startDate: string; endDate: string; count: number }) => {
+  execute: async ({ activityType }: { activityType?: string }) => {
     const stravaClient = new StravaClient();
-    const activities = await stravaClient.getActivitiesByDate(
-      new Date(startDate),
-      new Date(endDate),
-      1,
-      Math.min(count || 10, 100)
-    );
+    
+    try {
+      // Get recent activities (last 30 days, fetch more to find the right type)
+      const activities = await stravaClient.getActivitiesByDate(
+        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        new Date(),
+        1,
+        50 // Get more to find the right type
+      );
 
-    return {
-      content: activities.map((activity: Activity) => ({
-        type: "text" as const,
-        text: `🏃 ${activity.name} (ID: ${activity.id}) — ${formatDistance(activity.distance)}${activity.total_elevation_gain ? `, ${formatElevation(activity.total_elevation_gain)} elevation gain` : ''} on ${new Date(activity.start_date).toLocaleDateString()}`
-      }))
-    };
+      // Filter by type if specified
+      let filteredActivities = activities;
+      if (activityType) {
+        filteredActivities = activities.filter((activity: Activity) => 
+          activity.type.toLowerCase() === activityType.toLowerCase()
+        );
+      }
+
+      if (filteredActivities.length === 0) {
+        return {
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ No ${activityType ? activityType + ' ' : ''}activities found in the last 30 days` 
+          }],
+          isError: true
+        };
+      }
+
+      const lastActivity = filteredActivities[0];
+      const isRun = lastActivity.type.toLowerCase().includes('run');
+
+      // Build basic activity info
+      let responseText = `🏃 ${lastActivity.name}\n`;
+      responseText += `Type: ${lastActivity.type}\n`;
+      responseText += `Date: ${new Date(lastActivity.start_date).toLocaleDateString()}\n`;
+      responseText += `Distance: ${formatDistance(lastActivity.distance)}\n`;
+      responseText += `Moving Time: ${Math.floor(lastActivity.moving_time / 60)}:${String(lastActivity.moving_time % 60).padStart(2, '0')}\n`;
+      
+      // Calculate pace for runs
+      if (isRun && lastActivity.distance > 0) {
+        const paceSecondsPerMile = lastActivity.moving_time / metersToMiles(lastActivity.distance);
+        const paceMinutes = Math.floor(paceSecondsPerMile / 60);
+        const paceSeconds = Math.floor(paceSecondsPerMile % 60);
+        responseText += `Pace: ${paceMinutes}:${String(paceSeconds).padStart(2, '0')} per mile\n`;
+      }
+      
+      if (lastActivity.total_elevation_gain) {
+        responseText += `Elevation Gain: ${formatElevation(lastActivity.total_elevation_gain)}\n`;
+      }
+      responseText += `\n`;
+
+      // Automatically include heart rate analysis if available
+      if (lastActivity.has_heartrate) {
+        const heartRateData = await stravaClient.getHeartRateData(lastActivity.id);
+        
+        if (heartRateData.has_heartrate) {
+          responseText += `Heart Rate Statistics:\n`;
+          if (heartRateData.heart_rate_stats) {
+            responseText += `- Average: ${heartRateData.heart_rate_stats.avg} bpm\n`;
+            responseText += `- Min: ${heartRateData.heart_rate_stats.min} bpm\n`;
+            responseText += `- Max: ${heartRateData.heart_rate_stats.max} bpm\n\n`;
+          }
+          
+          // Zone analysis
+          if (heartRateData.zone_analysis && !heartRateData.zone_analysis.error) {
+            const zoneAnalysis = heartRateData.zone_analysis;
+            responseText += `Zone Analysis (${zoneAnalysis.sport}):\n`;
+            responseText += `Total Time: ${zoneAnalysis.total_time_minutes} minutes\n\n`;
+            responseText += `Time in Zones:\n`;
+            
+            for (const zone of zoneAnalysis.zones) {
+              responseText += `- ${zone.zone_name}: ${zone.time_minutes} min (${zone.percentage}%)`;
+              if (zone.average_heart_rate) {
+                responseText += ` - Avg HR: ${zone.average_heart_rate} bpm`;
+              }
+              responseText += `\n`;
+            }
+          } else if (heartRateData.zone_analysis?.error) {
+            responseText += `\n⚠️ Zone analysis unavailable: ${heartRateData.zone_analysis.error}\n`;
+            responseText += `Configure zones in zones.config.json to enable zone analysis.\n`;
+          }
+        }
+      } else {
+        responseText += `\nℹ️ This activity does not have heart rate data.\n`;
+      }
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: responseText
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{ 
+          type: "text" as const, 
+          text: `❌ Error retrieving last activity: ${error instanceof Error ? error.message : String(error)}` 
+        }],
+        isError: true
+      };
+    }
   }
 };
 
@@ -330,10 +467,10 @@ const getActivityLaps = {
 
 // Register tools with the server
 server.tool(
-  getRecentActivities.name,
-  getRecentActivities.description,
-  getRecentActivities.inputSchema?.shape ?? {},
-  getRecentActivities.execute
+  getLastActivity.name,
+  getLastActivity.description,
+  getLastActivity.inputSchema?.shape ?? {},
+  getLastActivity.execute
 );
 
 server.tool(
@@ -348,13 +485,6 @@ server.tool(
   getActivityHeartRate.description,
   getActivityHeartRate.inputSchema?.shape ?? {},
   getActivityHeartRate.execute
-);
-
-server.tool(
-  getRecentActivitiesWithHeartRate.name,
-  getRecentActivitiesWithHeartRate.description,
-  getRecentActivitiesWithHeartRate.inputSchema?.shape ?? {},
-  getRecentActivitiesWithHeartRate.execute
 );
 
 server.tool(

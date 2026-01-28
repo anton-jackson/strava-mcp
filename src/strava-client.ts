@@ -387,6 +387,45 @@ export class StravaClient {
       });
     });
   }
+
+  /**
+   * Get ALL activities within a specific date range by paginating through all pages
+   * @param after Start date
+   * @param before End date
+   * @param perPage Number of items per page (max 200)
+   * @returns Array of all activity objects in the date range
+   */
+  async getAllActivitiesByDate(after: Date, before: Date, perPage = 200) {
+    return this.handleApiCall(`getAllActivitiesByDate(${after.toISOString()} - ${before.toISOString()})`, async () => {
+      const afterTimestamp = Math.floor(after.getTime() / 1000);
+      const beforeTimestamp = Math.floor(before.getTime() / 1000);
+      
+      const allActivities: any[] = [];
+      let page = 1;
+      let hasMore = true;
+      const maxPerPage = Math.min(perPage, 200); // Strava API max is 200 per page
+      
+      while (hasMore) {
+        const activities = await this.getActivities({
+          after: afterTimestamp,
+          before: beforeTimestamp,
+          page,
+          per_page: maxPerPage
+        });
+        
+        if (activities && activities.length > 0) {
+          allActivities.push(...activities);
+          // If we got fewer than per_page, we've reached the end
+          hasMore = activities.length === maxPerPage;
+          page++;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      return allActivities;
+    });
+  }
   
   /**
    * Get detailed heart rate data for a specific activity
