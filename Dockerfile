@@ -1,19 +1,22 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
-# Copy built application
+# Copy built application and config files
 COPY dist/ ./dist/
+COPY zones.config.json ./zones.config.json
 
-# Set environment variables
+# .env is NOT baked into the image — mount at runtime or pass env vars
+# Required env vars: STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET,
+# STRAVA_REFRESH_TOKEN, STRAVA_ACCESS_TOKEN, MCP_API_KEY
+
 ENV NODE_ENV=production
 
-# Expose the server port
 EXPOSE 3000
 
-# Start the server
-CMD ["node", "dist/index.js"]
+# Use the HTTP entry point for remote deployment
+CMD ["node", "dist/http-server.js"]

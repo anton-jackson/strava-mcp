@@ -11,6 +11,7 @@
     "test:watch": "jest --watch",
     "test:mcp": "ts-node src/test-server.ts",
     "dev:mcp": "ts-node --esm src/mcp-server.ts",
+    "start:http": "node dist/http-server.js",
     "build:start": "npm run build && npm start",
     "auth-tester": "ts-node --esm scripts/auth-tester.ts",
     "refresh-token": "ts-node --esm scripts/refresh-token.ts",

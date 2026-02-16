@@ -2,13 +2,18 @@ import strava from 'strava-v3';
 import dotenv from 'dotenv';
 import fs from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { loadZonesConfig, getHeartRateZone, getPowerZone } from './zones-config.js';
 
+// Fallback dotenv load (entry points load .env explicitly before this module)
 dotenv.config();
 
-// Path to .env file for token updates
-const envPath = path.resolve(process.cwd(), '.env');
+// Path to .env file for token updates — use __dirname-relative resolution
+// so it works regardless of process.cwd() (e.g., in Docker or systemd)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const envPath = path.join(path.resolve(__dirname, '..'), '.env');
 
 export class StravaClient {
   private client: any;
