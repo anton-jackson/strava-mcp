@@ -19,8 +19,11 @@ export class StravaClient {
   private client: any;
   
   constructor(accessToken?: string) {
-    // Initialize with the provided token or from env
-    this.client = accessToken ? strava.client(accessToken) : strava;
+    // Always use an explicit token (provided or from env) so the strava-v3
+    // client is configured with the current access token rather than
+    // relying on the raw module which may hold a stale value.
+    const token = accessToken || process.env.STRAVA_ACCESS_TOKEN;
+    this.client = token ? strava.client(token) : strava;
   }
 
   /**
@@ -167,14 +170,24 @@ export class StravaClient {
   }
   
   /**
-   * Check if an error is an authentication error (401)
+   * Check if an error is an authentication error (401).
+   * Handles multiple error shapes:
+   *   - axios:           error.response.status === 401
+   *   - request-promise: error.statusCode === 401  (used by strava-v3)
+   *   - Strava message:  "Authorization Error" in the body
    */
   private isAuthError(error: any): boolean {
-    return (
-      error && 
-      error.response && 
-      error.response.status === 401
-    );
+    if (!error) return false;
+    // axios-style
+    if (error.response?.status === 401) return true;
+    // request-promise / strava-v3 style
+    if (error.statusCode === 401) return true;
+    if (error.response?.statusCode === 401) return true;
+    // Strava sometimes returns a JSON body with "Authorization Error"
+    const body = error.error || error.response?.body;
+    if (typeof body === 'string' && body.includes('Authorization Error')) return true;
+    if (typeof body === 'object' && body?.message === 'Authorization Error') return true;
+    return false;
   }
   
   async getAthlete() {
