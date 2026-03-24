@@ -23,7 +23,8 @@ export class StravaClient {
     // client is configured with the current access token rather than
     // relying on the raw module which may hold a stale value.
     const token = accessToken || process.env.STRAVA_ACCESS_TOKEN;
-    this.client = token ? strava.client(token) : strava;
+    if (token) strava.client(token);
+    this.client = strava;
   }
 
   /**
@@ -33,7 +34,8 @@ export class StravaClient {
     try {
       console.error('Initializing Strava client with fresh token...');
       const newToken = await this.refreshAccessToken();
-      this.client = strava.client(newToken);
+      strava.client(newToken);
+      this.client = strava;
       console.error('✅ Strava client initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize Strava client:', error);
@@ -82,7 +84,8 @@ export class StravaClient {
       console.error(`✅ Token refreshed. New token expires: ${new Date(response.data.expires_at * 1000).toLocaleString()}`);
       
       // Update the client with the new token
-      this.client = strava.client(String(newAccessToken));
+      strava.client(String(newAccessToken));
+      this.client = strava;
       
       return String(newAccessToken);
     } catch (error) {
