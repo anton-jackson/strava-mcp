@@ -52,7 +52,7 @@ const getActivityById = {
     const details = [
       `🏃 ${activity.name}`,
       `Type: ${activity.type}`,
-      `Date: ${new Date(activity.start_date).toLocaleDateString()}`,
+      `Date: ${new Date(activity.start_date_local || activity.start_date).toLocaleDateString()}`,
       `Distance: ${formatDistance(activity.distance)}`,
       `Moving Time: ${Math.floor(activity.moving_time / 60)} minutes`,
       activity.total_elevation_gain ? `Elevation Gain: ${formatElevation(activity.total_elevation_gain)}` : null,
@@ -92,7 +92,7 @@ const getActivityHeartRate = {
       // Build response text
       let responseText = `❤️ ${heartRateData.activity_name}\n`;
       responseText += `Activity Type: ${heartRateData.activity_type}\n`;
-      responseText += `Date: ${new Date(heartRateData.start_date).toLocaleDateString()}\n\n`;
+      responseText += `Date: ${new Date(heartRateData.start_date_local || heartRateData.start_date).toLocaleDateString()}\n\n`;
 
       // Heart rate stats
       if (heartRateData.heart_rate_stats) {
@@ -236,7 +236,7 @@ const getActivitiesByDate = {
     return {
       content: limitedActivities.map((activity: Activity) => ({
         type: "text" as const,
-        text: `🏃 ${activity.name} (ID: ${activity.id}) — ${formatDistance(activity.distance)}${activity.total_elevation_gain ? `, ${formatElevation(activity.total_elevation_gain)} elevation gain` : ''} on ${new Date(activity.start_date).toLocaleDateString()}`
+        text: `🏃 ${activity.name} (ID: ${activity.id}) — ${formatDistance(activity.distance)}${activity.total_elevation_gain ? `, ${formatElevation(activity.total_elevation_gain)} elevation gain` : ''} on ${new Date(activity.start_date_local || activity.start_date).toLocaleDateString()}`
       }))
     };
   }
@@ -285,7 +285,7 @@ const getLastActivity = {
       // Build basic activity info
       let responseText = `🏃 ${lastActivity.name}\n`;
       responseText += `Type: ${lastActivity.type}\n`;
-      responseText += `Date: ${new Date(lastActivity.start_date).toLocaleDateString()}\n`;
+      responseText += `Date: ${new Date(lastActivity.start_date_local || lastActivity.start_date).toLocaleDateString()}\n`;
       responseText += `Distance: ${formatDistance(lastActivity.distance)}\n`;
       responseText += `Moving Time: ${Math.floor(lastActivity.moving_time / 60)}:${String(lastActivity.moving_time % 60).padStart(2, '0')}\n`;
 
